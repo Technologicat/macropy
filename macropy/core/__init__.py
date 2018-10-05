@@ -47,7 +47,7 @@ class Literal:
 
 
 class Captured:
-    """An helper class to mark capures symbols in an AST tree."""
+    """An helper class to mark captured symbols in an AST tree."""
     def __init__(self, val, name):
         self.val = val
         self.name = name
@@ -90,7 +90,7 @@ def ast_repr(x):
 def parse_expr(expr_string):
     """Parses a string into an `expr` AST.
 
-    :param str expr_string: a string containing the expression to parsers
+    :param str expr_string: a string containing the expression to parse
     :returns: an ``ast.Expr`` node containing the expression tree
     """
     return ast.parse(expr_string).body[0].value
@@ -99,7 +99,7 @@ def parse_expr(expr_string):
 def parse_stmt(code_string):
     """Parses a string into an `stmt` AST.
 
-    :param str code_string: a string containing the expression to parsers
+    :param str code_string: a string containing the expression to parse
     :returns: a list containing the parsed statements as AST nodes
     """
     return ast.parse(code_string).body
