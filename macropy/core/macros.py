@@ -73,7 +73,7 @@ def macro_stub(func):
 
 MacroData = collections.namedtuple('MacroData', ['macro', 'macro_tree',
                                                  'body_tree', 'call_args',
-                                                 'kwargs', 'name'])
+                                                 'kwargs', 'extrakws', 'name'])
 
 MacroData.__doc__ = """
 Contains a macro's detailed informations needed to expand it.
@@ -103,22 +103,27 @@ class MacroType(ABC):
         """Given an AST tree of a macro, returns detailed informations about it.
 
         :param macro_tree: an AST tree
-        :returns: A tuple containing tree elements:
+        :returns: A tuple containing four elements:
           - the name of the macro;
           - the tree containing the macro itself (it is *macro_tree*
             itself as of now);
-          - the arguments to the macro invocation.
+          - arguments to the macro invocation;
+          - if a Call, named arguments to the macro invocation, as OrderedDict.
 
         """
+        kwargs = collections.OrderedDict()  # keywords is a list; preserve order
         if isinstance(macro_tree, ast.Call):
             call_args = tuple(macro_tree.args)
+            for kw in macro_tree.keywords:
+                if kw.arg is not None:
+                    kwargs[kw.arg] = kw.value
             macro_tree = macro_tree.func
         else:
             call_args = ()
         if isinstance(macro_tree, ast.Name):
-            return macro_tree.id, macro_tree, call_args
+            return macro_tree.id, macro_tree, call_args, kwargs
         else:
-            return None, macro_tree, call_args
+            return None, macro_tree, call_args, kwargs
 
     @abstractmethod
     def detect_macro(self, in_tree):
@@ -147,10 +152,10 @@ class Expr(MacroType):
         if (isinstance(in_tree, ast.Subscript) and
             type(in_tree.slice) is ast.Index):  # noqa: E129
             body_tree = in_tree.slice.value
-            name, macro_tree, call_args = self.get_macro_details(in_tree.value)
+            name, macro_tree, call_args, kwargs = self.get_macro_details(in_tree.value)
             if name is not None and name in self.registry:
                 new_tree = yield MacroData(self.registry[name], macro_tree,
-                                           body_tree, call_args, {}, name)
+                                           body_tree, call_args, kwargs, {}, name)
                 assert isinstance(new_tree, ast.expr), ('Wrong type %r' %
                                                         type(new_tree))
                 new_tree = ast.Expr(new_tree)
@@ -171,13 +176,12 @@ class Block(MacroType):
             assert isinstance(in_tree.body, list), real_repr(in_tree.body)
             new_tree = None
             for wi in in_tree.items:
-                name, macro_tree, call_args = self.get_macro_details(
+                name, macro_tree, call_args, kwargs = self.get_macro_details(
                     wi.context_expr)
                 if name is not None and name in self.registry:
                     new_tree = yield MacroData(self.registry[name], macro_tree,
-                                               in_tree.body, call_args,
-                                               {'target': wi.optional_vars},
-                                               name)
+                                               in_tree.body, call_args, kwargs,
+                                               {'target': wi.optional_vars}, name)
 
             if new_tree:
                 if isinstance(new_tree, ast.expr):
@@ -212,7 +216,7 @@ class Decorator(MacroType):
             additions = []
             # process each decorator from the innermost outwards
             for dec in rev_decs:
-                name, macro_tree, call_args = self.get_macro_details(dec)
+                name, macro_tree, call_args, kwargs = self.get_macro_details(dec)
                 # if the decorator is not a macro, add it to a list
                 # for later re-insertion, either before executing an
                 # outer macro or at the end of the loop if no macro is found
@@ -226,7 +230,7 @@ class Decorator(MacroType):
                                            tree.decorator_list)
                     seen_decs = []
                 tree = yield MacroData(self.registry[name], macro_tree, tree,
-                                       call_args, {}, name)
+                                       call_args, kwargs, {}, name)
                 if type(tree) is list:
                     additions = tree[1:]
                     tree = tree[0]
@@ -400,7 +404,7 @@ class ExpansionContext:
         def gen_macro_expand_single(tree):
             return self.macro_expand_single(MacroData(
                 (mfunc, sys.modules[mfunc.__module__]),
-                tree, tree, args, kwargs, mfunc.__name__))
+                tree, tree, args, kwargs, {}, mfunc.__name__))
         return gen_macro_expand_single
 
     def expand_macro(self, mfunc, tree=None, *args, **kwargs):
@@ -497,9 +501,10 @@ class ExpansionContext:
             new_tree = mfunc(
                 tree=new_tree,
                 args=macro_data.call_args,
+                kwargs=macro_data.kwargs,
                 src=self.src,
                 expand_macros=self.expand_macros,
-                **dict(tuple(macro_data.kwargs.items()) +
+                **dict(tuple(macro_data.extrakws.items()) +
                        tuple(self.file_vars.items()))
             )
             # the result is a generator, treat it like a
@@ -527,11 +532,12 @@ class ExpansionContext:
             new_tree = function(
                 tree=new_tree,
                 args=macro_data.call_args,
+                kwargs=macro_data.kwargs,
                 src=self.src,
                 expand_macros=self.expand_macros,
                 lineno=macro_data.macro_tree.lineno,
                 col_offset=macro_data.macro_tree.col_offset,
-                **dict(tuple(macro_data.kwargs.items()) +
+                **dict(tuple(macro_data.extrakws.items()) +
                        tuple(self.file_vars.items()))
             )
         # yield it for one more walking
