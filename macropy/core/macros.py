@@ -108,18 +108,16 @@ class MacroType(ABC):
           - the tree containing the macro itself (it is *macro_tree*
             itself as of now);
           - arguments to the macro invocation;
-          - if a Call, named arguments to the macro invocation, as OrderedDict.
+          - named arguments to the macro invocation.
 
         """
-        kwargs = collections.OrderedDict()  # keywords is a list; preserve order
         if isinstance(macro_tree, ast.Call):
             call_args = tuple(macro_tree.args)
-            for kw in macro_tree.keywords:
-                if kw.arg is not None:
-                    kwargs[kw.arg] = kw.value
+            kwargs = tuple(macro_tree.keywords)
             macro_tree = macro_tree.func
         else:
             call_args = ()
+            kwargs = ()
         if isinstance(macro_tree, ast.Name):
             return macro_tree.id, macro_tree, call_args, kwargs
         else:
