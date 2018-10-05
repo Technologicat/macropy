@@ -446,7 +446,7 @@ go into the ``**kw``, but can be explicitly declared for ease of use:
 .. code:: python
 
   @Walker
-  def transform(tree, ctx, set_ctx, **kw):
+  def transform(tree, *, ctx, set_ctx, **kw):
       ... do stuff with ctx ...
       set_ctx(...)
       return new_tree
@@ -457,39 +457,40 @@ This section documents what each one does.
 ``ctx``
 ~~~~~~~
 
-The Walker allows the programmer to provide a *context*:
+The Walker allows the programmer to provide a *context*. Here ``ctx``
+is an arbitrary programmer-defined name:
 
 .. code:: python
 
   @Walker
-  def transform(tree, ctx, **kw):
+  def transform(tree, *, ctx, **kw):
       ... do stuff with ctx ...
       return new_tree
 
   new_tree = transform.recurse(old_tree)
-  new_tree = transform.recurse(old_tree, init_ctx)
+  new_tree = transform.recurse(old_tree, ctx=init_ctx)
 
 
-If the ``transform`` function takes an additional argument, it will be
-given the ``init_ctx`` that is passed in as the second argument to the
-``.recurse()`` method (default ``None``).
+If the ``transform`` function takes a named argument ``ctx``, it will be
+given the ``init_ctx`` that is passed in as the named argument ``ctx`` to the
+``.recurse()`` method.
 
 ``set_ctx``
 ~~~~~~~~~~~
 
-Apart from using the ``ctx`` passed in to the ``recurse`` method,
+Apart from using a ``ctx`` passed in to the ``recurse`` method,
 ``transform`` can request for the ``set_ctx`` function:
 
 .. code:: python
 
   @Walker
-  def transform(tree, ctx, set_ctx, **kw):
+  def transform(tree, *, ctx, set_ctx, **kw):
       ... do stuff with ctx ...
-      set_ctx(new_ctx)
+      set_ctx(ctx=new_ctx)
       return new_tree
 
 This will cause all children of the current ``tree`` to receive
-``new_ctx`` as their ``ctx`` argument.
+the value ``new_ctx`` as their named argument ``ctx``.
 
 ``collect``
 ~~~~~~~~~~~
@@ -501,7 +502,7 @@ as it recurses over the AST. This is done by requesting the
 .. code:: python
 
   @Walker
-  def transform(tree, collect, **kw):
+  def transform(tree, *, collect, **kw):
       ...
       collect(value)
       return new_tree
@@ -523,7 +524,7 @@ Lastly, the Walker provides a way to end the recursion, via the
 .. code:: python
 
   @Walker
-  def transform(tree, stop, **kw):
+  def transform(tree, *, stop, **kw):
       ...
       if ...:
           return new_tree
@@ -548,11 +549,11 @@ arguments. For example, you could have a walker such as:
 .. code:: python
 
   @Walker
-  def transform(tree, ctx, set_ctx, collect, stop, **kw):
+  def transform(tree, *, ctx, set_ctx, collect, stop, **kw):
       ...
       return new_tree
 
-  new_tree, collected = transform.recurse_collect(old_tree, initial_ctx)
+  new_tree, collected = transform.recurse_collect(old_tree, ctx=initial_ctx)
 
 
 This provides it a large amount of versatility, and lets you use the
