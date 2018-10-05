@@ -18,11 +18,11 @@ class Walker(object):
 
     Which is used via:
 
-    new_tree = transform.recurse(old_tree, initial_ctx)
+    new_tree = transform.recurse(old_tree, ctx=initial_ctx)
     new_tree = transform.recurse(old_tree)
-    new_tree, collected = transform.recurse_collect(old_tree, initial_ctx)
+    new_tree, collected = transform.recurse_collect(old_tree, ctx=initial_ctx)
     new_tree, collected = transform.recurse_collect(old_tree)
-    collected = transform.collect(old_tree, initial_ctx)
+    collected = transform.collect(old_tree, ctx=initial_ctx)
     collected = transform.collect(old_tree)
 
     The `transform` function takes the tree to be transformed, in addition to
@@ -46,13 +46,15 @@ class Walker(object):
     These additional arguments can be declared in the signature, e.g.:
 
     @Walker
-    def transform(tree, ctx, set_ctx, **kw):
+    def transform(tree, *, ctx, set_ctx, **kw):
         ... do stuff with ctx ...
         set_ctx(...)
         return new_tree
 
     for ease of use.
 
+    The other names are literal, but `ctx` is just a user-defined name;
+    it can be anything, and there can be more than one.
     """
     def __init__(self, func):
         self.func = func
