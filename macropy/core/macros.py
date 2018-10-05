@@ -331,7 +331,7 @@ class ExpansionContext:
     """Knows how to walk over AST nodes and some other utility classes and
     at each level tries to expand the macros, if present.
 
-    Differenty from the previous implementation this allows for macros
+    Differently from the previous implementation this allows for macros
     to be defined inside the body of other macros, where it's
     permitted by the syntax. This means that trees like:
 
@@ -395,7 +395,7 @@ class ExpansionContext:
     def create_single_macro_expand_generator(self, mfunc, *args, **kwargs):
         """The purpose is the same of `create_std_tree_expand_generator`:meth:,
         but this one is tailored to accept a macro function with some parameters
-        to generate a closure that will then be called by `walk_trre`:meth: with
+        to generate a closure that will then be called by `walk_tree`:meth: with
         the tree to operate on."""
         def gen_macro_expand_single(tree):
             return self.macro_expand_single(MacroData(
