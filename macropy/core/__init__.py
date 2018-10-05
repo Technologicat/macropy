@@ -408,7 +408,7 @@ if compat.HAS_FSTRING:
     trec.update({
         ast.FormattedValue: lambda tree, i: ("{" +  rec(tree.value, i) +
                                         {-1: "", 115: "!s", 114: "!r",
-                                         115: "!a"}[tree.conversion] +
+                                         97: "!a"}[tree.conversion] +
                                         ((":" + tree.format_spec.values[0].s)
                                          if tree.format_spec else "") +
                                         "}"),
