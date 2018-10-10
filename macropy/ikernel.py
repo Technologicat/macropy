@@ -24,12 +24,15 @@ Based on ``macropy.core.console`` and the following:
 import ast
 import importlib
 from collections import OrderedDict
-from sys import stderr
+from functools import partial
 
 from ipykernel.ipkernel import IPythonKernel
+from IPython.core.error import InputRejected
 
 from macropy import __version__ as macropy_version
 from macropy.core.macros import ModuleExpansionContext, detect_macros
+
+_placeholder = "<interactive input>"
 
 class MacroTransformer(ast.NodeTransformer):
     def __init__(self, kernel, *args, **kwargs):
@@ -39,21 +42,26 @@ class MacroTransformer(ast.NodeTransformer):
 
     def visit(self, tree):
         try:
-            for fullname, macro_bindings in detect_macros(tree, '__main__', reload=True):
-                mod = importlib.import_module(fullname)
-                self.bindings[fullname] = (mod, macro_bindings)
+            bindings = detect_macros(tree, '__main__', reload=True)  # macro imports
+            if bindings:
+                self.kernel.stubs_changed = True
+                for fullname, macro_bindings in bindings:
+                    mod = importlib.import_module(fullname)
+                    self.bindings[fullname] = (mod, macro_bindings)
             newtree = ModuleExpansionContext(tree, self.kernel.src, self.bindings.values()).expand_macros()
-            self.kernel._clear_src()
+            self.kernel.src = _placeholder
             return newtree
         except Exception as err:
-            print("Macro expansion error: {}".format(err), file=stderr)
-            return tree
-
-_placeholder = "<interactive input>"
+            # see IPython.core.interactiveshell.InteractiveShell.transform_ast()
+            raise InputRejected(*err.args)
 
 class MacroPyKernel(IPythonKernel):
     implementation = 'macropy'
     implementation_version = macropy_version
+
+    @property
+    def banner(self):
+        return "MacroPy {} on {}".format(self.implementation_version, super().banner)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -65,8 +73,10 @@ class MacroPyKernel(IPythonKernel):
                 return lines
             self.shell.input_transformers_post.append(get_source_code)
 
+        self.stubs_changed = False
+        self.current_stubs = set()
         self.macro_transformer = MacroTransformer(kernel=self)
-        self.shell.ast_transformers.append(self.macro_transformer)
+        self.shell.ast_transformers.append(self.macro_transformer)  # TODO: last or first?
 
         # initialize MacroPy in the session
         self.do_execute("import macropy.activate", silent=True,
@@ -79,22 +89,37 @@ class MacroPyKernel(IPythonKernel):
                                  store_history=store_history,
                                  user_expressions=user_expressions,
                                  allow_stdin=allow_stdin)
-        # import currently known macro stubs so that "some_macro?" works
-        for fullname, (_, macro_bindings) in self.macro_transformer.bindings.items():
-            stuff = ", ".join("{} as {}".format(name, asname) for name, asname in macro_bindings)
-            super().do_execute("from {} import {}".format(fullname, stuff),
-                               silent=True,
-                               store_history=False,
-                               user_expressions=None,
-                               allow_stdin=False)
+        if self.stubs_changed:
+            self._refresh_stubs()
         return ret
 
-    def _clear_src(self):
-        self.src = _placeholder
+    def _refresh_stubs(self):
+        """Refresh macro stub imports.
 
-    @property
-    def banner(self):
-        return "MacroPy {} on {}".format(self.implementation_version, super().banner)
+        Called whenever macro imports are performed, so that Jupyter help
+        "some_macro?" works for the currently available macros.
+
+        This allows the user to view macro docstrings.
+        """
+        self.stubs_changed = False
+        internal_execute = partial(super().do_execute,
+                                   silent=True,
+                                   store_history=False,
+                                   user_expressions=None,
+                                   allow_stdin=False)
+
+        # Clear previous stubs, because our MacroTransformer overrides
+        # the available set of macros from a given module with those
+        # most recently imported from that module.
+        for asname in self.current_stubs:
+            internal_execute("del {}".format(asname))
+        self.current_stubs = set()
+
+        for fullname, (_, macro_bindings) in self.macro_transformer.bindings.items():
+            for _, asname in macro_bindings:
+                self.current_stubs.add(asname)
+            stubnames = ", ".join("{} as {}".format(name, asname) for name, asname in macro_bindings)
+            internal_execute("from {} import {}".format(fullname, stubnames))
 
 if __name__ == '__main__':
     from ipykernel.kernelapp import IPKernelApp
