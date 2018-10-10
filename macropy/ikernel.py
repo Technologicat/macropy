@@ -4,15 +4,15 @@
 
 Installation::
 
-    jupyter kernelspec install --user macroipy
+    jupyter kernelspec install --user imacropy
 
-The current directory should contain a subdirectory ``macroipy`` with the file
+The current directory should contain a subdirectory ``imacropy`` with the file
 ``kernel.json`` containing the kernel spec. Installation will register the kernel
 for ``jupyter notebook``.
 
 Usage in terminal::
 
-    jupyter console --kernel macroipy
+    jupyter console --kernel imacropy
 
 Based on ``macropy.core.console`` and the following:
 
