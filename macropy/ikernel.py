@@ -23,6 +23,7 @@ Based on ``macropy.core.console`` and the following:
 
 import ast
 import importlib
+from collections import OrderedDict
 from sys import stderr
 
 from ipykernel.ipkernel import IPythonKernel
@@ -34,14 +35,14 @@ class MacroTransformer(ast.NodeTransformer):
     def __init__(self, kernel, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.kernel = kernel
-        self.bindings = []
+        self.bindings = OrderedDict()
 
     def visit(self, tree):
         try:
-            bindings = detect_macros(tree, '__main__')
-            for mod, bind in bindings:
-                self.bindings.append((importlib.import_module(mod), bind))
-            newtree = ModuleExpansionContext(tree, self.kernel.src, self.bindings).expand_macros()
+            for fullname, macro_bindings in detect_macros(tree, '__main__', reload=True):
+                mod = importlib.import_module(fullname)
+                self.bindings[fullname] = (mod, macro_bindings)
+            newtree = ModuleExpansionContext(tree, self.kernel.src, self.bindings.values()).expand_macros()
             self.kernel._clear_src()
             return newtree
         except Exception as err:
