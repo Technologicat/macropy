@@ -682,7 +682,7 @@ class ModuleExpansionContext(ExpansionContext):
         return tree
 
 
-def detect_macros(tree, from_fullname, from_package=None, from_module=None):
+def detect_macros(tree, from_fullname, from_package=None, from_module=None, reload=False):
     """Look for macros imports within an AST, transforming them and extracting
     the list of macro modules."""
     bindings = []
@@ -702,6 +702,9 @@ def detect_macros(tree, from_fullname, from_package=None, from_module=None):
             logger.info("Importing macros from %r into %r", fullname,
                         from_module)
             mod = importlib.import_module(fullname)
+            if reload:  # for REPL: always load the latest definitions
+                logger.info("Reloading module %r", fullname)
+                mod = importlib.reload(mod)
 
             bindings.append((
                 fullname,
