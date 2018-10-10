@@ -4,7 +4,6 @@
 import ast
 import code
 import importlib
-import sys
 from collections import OrderedDict
 
 from .macros import ModuleExpansionContext, detect_macros
