@@ -5,6 +5,7 @@ import ast
 import code
 import importlib
 import sys
+from collections import OrderedDict
 
 from .macros import ModuleExpansionContext, detect_macros
 
@@ -13,7 +14,7 @@ class MacroConsole(code.InteractiveConsole):
 
     def __init__(self, locals=None, filename="<console>"):
         code.InteractiveConsole.__init__(self, locals, filename)
-        self.bindings = []
+        self.bindings = OrderedDict()
 
     def runsource(self, source, filename="<input>", symbol="single"):
         try:
@@ -28,12 +29,10 @@ class MacroConsole(code.InteractiveConsole):
 
         try:
             tree = ast.parse(source)
-            bindings = detect_macros(tree, '__main__')
-
-            for mod, bind in bindings:
-                self.bindings.append((importlib.import_module(mod), bind))
-
-            tree = ModuleExpansionContext(tree, source, self.bindings).expand_macros()
+            for fullname, macro_bindings in detect_macros(tree, '__main__', reload=True):
+                mod = importlib.import_module(fullname)
+                self.bindings[fullname] = (mod, macro_bindings)
+            tree = ModuleExpansionContext(tree, source, self.bindings.values()).expand_macros()
 
             tree = ast.Interactive(tree.body)
             code = compile(tree, filename, symbol,
