@@ -65,13 +65,29 @@ class MacroPyKernel(IPythonKernel):
                 return lines
             self.shell.input_transformers_post.append(get_source_code)
 
-        self.shell.ast_transformers.append(MacroTransformer(kernel=self))
+        self.macro_transformer = MacroTransformer(kernel=self)
+        self.shell.ast_transformers.append(self.macro_transformer)
 
         # initialize MacroPy in the session
         self.do_execute("import macropy.activate", silent=True,
                         store_history=False,
                         user_expressions=None,
                         allow_stdin=False)
+
+    def do_execute(self, code, silent, store_history=True, user_expressions=None, allow_stdin=False):
+        ret = super().do_execute(code, silent,
+                                 store_history=store_history,
+                                 user_expressions=user_expressions,
+                                 allow_stdin=allow_stdin)
+        # import currently known macro stubs so that "some_macro?" works
+        for fullname, (_, macro_bindings) in self.macro_transformer.bindings.items():
+            stuff = ", ".join("{} as {}".format(name, asname) for name, asname in macro_bindings)
+            super().do_execute("from {} import {}".format(fullname, stuff),
+                               silent=True,
+                               store_history=False,
+                               user_expressions=None,
+                               allow_stdin=False)
+        return ret
 
     def _clear_src(self):
         self.src = _placeholder
