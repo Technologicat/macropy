@@ -1,9 +1,0 @@
-{
- "argv": ["python", "-m",
-          "macropy.ikernel", "-f",
-          "{connection_file}"],
- "display_name": "MacroPy",
- "name": "MacroPy",
- "language": "python"
-}
-
