@@ -8,6 +8,32 @@ To enable::
 To autoload it at IPython startup, put this into your ``ipython_config.py``::
 
     c.InteractiveShellApp.extensions = ["macropy.imacro"]
+
+Notes:
+
+  - Each time a ``from mymodule import macros, ...`` is executed in the REPL,
+    the system reloads ``mymodule``, to use the latest macro definitions.
+
+    Hence, semi-live updates to macro definitions are possible: hack on your
+    macros, re-import, and try out the new version in the REPL; no need to restart
+    the REPL session in between.
+
+  - The set of macros available from ``mymodule``, at any given time, is those
+    specified **in the most recent** ``from mymodule import macros, ...``.
+
+    Any other macros from ``mymodule``, that were not specified in the most recent
+    import, will be unloaded when the import is performed.
+
+  - Each time after importing macros, the corresponding macro stubs are
+    automatically imported as regular Python objects.
+
+    Stubs are not directly usable. The intention is to let Python recognize
+    the macro name (otherwise there would be no run-time object by that name),
+    and to allow viewing macro docstrings and source code easily using
+    ``some_macro?``, ``some_macro??``.
+
+    This does not affect using the macros in the intended way, as macros,
+    since macros are expanded away before run-time.
 """
 
 import ast
@@ -58,34 +84,48 @@ class IMacroPyExtension:
     def __init__(self, shell):
         self.src = _placeholder
         self.shell = shell
+        ipy = self.shell.get_ipython()
 
-        self.shell.get_ipython().events.register('pre_run_cell', self._get_source_code)
-#        # TODO: maybe use something like the following instead, to get the
-#        # source code after any string-based transformers have run:
-#        if hasattr(self.shell, "input_transformers_post"):  # IPython 7.0+ with Python 3.5+
-#            def get_source_code(lines):
-#                self.src = lines
-#                return lines
-#            self.shell.input_transformers_post.append(get_source_code)
+        self.new_api = hasattr(self.shell, "input_transformers_post")  # IPython 7.0+ with Python 3.5+
+        if self.new_api:
+            self.shell.input_transformers_post.append(self._get_source_code)
+        else:
+            ipy.events.register('pre_run_cell', self._get_source_code_legacy)
 
         self.macro_bindings_changed = False
         self.current_stubs = set()
         self.macro_transformer = MacroTransformer(extension_instance=self)
         self.shell.ast_transformers.append(self.macro_transformer)  # TODO: last or first?
 
-        self.shell.get_ipython().events.register('post_run_cell', self._refresh_stubs)
+        ipy.events.register('post_run_cell', self._refresh_stubs)
 
         # initialize MacroPy in the session
         self.shell.run_cell("import macropy.activate", store_history=False, silent=True)
 
     def __del__(self):
-        self.shell.get_ipython().events.unregister('post_run_cell', self._refresh_stubs)
+        ipy = self.shell.get_ipython()
+        ipy.events.unregister('post_run_cell', self._refresh_stubs)
         self.shell.ast_transformers.remove(self.macro_transformer)
-        self.shell.get_ipython().events.unregister('pre_run_cell', self._get_source_code)
+        if self.new_api:
+            self.shell.input_transformers_post.remove(self._get_source_code)
+        else:
+            ipy.events.unregister('pre_run_cell', self._get_source_code_legacy)
 
-    def _get_source_code(self, info):
-        """Get the source code of the current cell just before it runs."""
+    def _get_source_code_legacy(self, info):
+        """Get the source code of the current cell just before it runs.
+
+        Does not account for any string transformers.
+        """
         self.src = info.raw_cell
+
+    def _get_source_code(self, lines):  # IPython 7.0+ with Python 3.5+
+        """Get the source code of the current cell.
+
+        This is a do-nothing string transformer that just captures the text.
+        It is intended to run last, just before any AST transformers run.
+        """
+        self.src = lines
+        return lines
 
     def _refresh_stubs(self, info):
         """Refresh macro stub imports.
