@@ -180,6 +180,7 @@ class Block(MacroType):
                     new_tree = yield MacroData(self.registry[name], macro_tree,
                                                in_tree.body, call_args, kwargs,
                                                {'target': wi.optional_vars}, name)
+                    in_tree.body = new_tree
 
             if new_tree:
                 if isinstance(new_tree, ast.expr):
