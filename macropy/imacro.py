@@ -42,6 +42,7 @@ from collections import OrderedDict
 from functools import partial
 
 from IPython.core.error import InputRejected
+from IPython.core.magic import register_cell_magic
 
 from macropy import __version__ as macropy_version
 from macropy.core.macros import ModuleExpansionContext, detect_macros
@@ -79,6 +80,21 @@ class MacroTransformer(ast.NodeTransformer):
         except Exception as err:
             # see IPython.core.interactiveshell.InteractiveShell.transform_ast()
             raise InputRejected(*err.args)
+
+# avoid complaining about typoed macro names...
+@register_cell_magic
+def ignore_importerror(line, cell):  # ...when their stubs are loaded
+    try:
+        exec(cell, _instance.shell.user_ns)  # set globals to the shell user namespace to respect assignments
+    except ImportError as e:
+        pass
+
+@register_cell_magic
+def ignore_nameerror(line, cell):  # ...when they are unloaded
+    try:
+        exec(cell, _instance.shell.user_ns)
+    except NameError as e:
+        pass
 
 class IMacroPyExtension:
     def __init__(self, shell):
@@ -146,11 +162,13 @@ class IMacroPyExtension:
         # the available set of macros from a given module with those
         # most recently imported from that module.
         for asname in self.current_stubs:
-            internal_execute("del {}".format(asname))
+            internal_execute("%%ignore_nameerror\n"
+                             "del {}".format(asname))
         self.current_stubs = set()
 
         for fullname, (_, macro_bindings) in self.macro_transformer.bindings.items():
             for _, asname in macro_bindings:
                 self.current_stubs.add(asname)
             stubnames = ", ".join("{} as {}".format(name, asname) for name, asname in macro_bindings)
-            internal_execute("from {} import {}".format(fullname, stubnames))
+            internal_execute("%%ignore_importerror\n"
+                             "from {} import {}".format(fullname, stubnames))
