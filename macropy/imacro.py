@@ -51,7 +51,15 @@ _placeholder = "<interactive input>"
 _instance = None
 
 def load_ipython_extension(ipython):
-    print("MacroPy {} -- Syntactic macros for Python.".format(macropy_version))
+    # FIXME: The banner is injected too late. It seems IPython startup has  already performed when ``load_ipython_extension()`` is called.
+    #
+    # FIXME: We shouldn't print anything directly here; doing that breaks tools such as the Emacs Python autoimporter (see importmagic.el
+    # FIXME: in Spacemacs; it will think epc failed to start if anything but the bare process id is printed). Tools expect to suppress
+    # FIXME: **all** of the IPython banner by telling IPython itself not to print it.
+    #
+    # FIXME: For now, let's just put the info into banner2, and refrain from printing it.
+    # https://stackoverflow.com/questions/31613804/how-can-i-call-ipython-start-ipython-with-my-own-banner
+    ipython.config.TerminalInteractiveShell.banner2 = "MacroPy {} -- Syntactic macros for Python.".format(macropy_version)
     global _instance
     if not _instance:
         _instance = IMacroPyExtension(shell=ipython)
