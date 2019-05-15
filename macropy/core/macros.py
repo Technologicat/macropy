@@ -73,7 +73,7 @@ def macro_stub(func):
 
 MacroData = collections.namedtuple('MacroData', ['macro', 'macro_tree',
                                                  'body_tree', 'call_args',
-                                                 'kwargs', 'extrakws', 'name'])
+                                                 'call_kwargs', 'extrakws', 'name'])
 
 MacroData.__doc__ = """
 Contains a macro's detailed informations needed to expand it.
@@ -113,15 +113,15 @@ class MacroType(ABC):
         """
         if isinstance(macro_tree, ast.Call):
             call_args = tuple(macro_tree.args)
-            kwargs = tuple(macro_tree.keywords)
+            call_kwargs = {x.arg: x.value for x in macro_tree.keywords}
             macro_tree = macro_tree.func
         else:
             call_args = ()
-            kwargs = ()
+            call_kwargs = {}
         if isinstance(macro_tree, ast.Name):
-            return macro_tree.id, macro_tree, call_args, kwargs
+            return macro_tree.id, macro_tree, call_args, call_kwargs
         else:
-            return None, macro_tree, call_args, kwargs
+            return None, macro_tree, call_args, call_kwargs
 
     @abstractmethod
     def detect_macro(self, in_tree):
@@ -150,10 +150,10 @@ class Expr(MacroType):
         if (isinstance(in_tree, ast.Subscript) and
             type(in_tree.slice) is ast.Index):  # noqa: E129
             body_tree = in_tree.slice.value
-            name, macro_tree, call_args, kwargs = self.get_macro_details(in_tree.value)
+            name, macro_tree, call_args, call_kwargs = self.get_macro_details(in_tree.value)
             if name is not None and name in self.registry:
                 new_tree = yield MacroData(self.registry[name], macro_tree,
-                                           body_tree, call_args, kwargs, {}, name)
+                                           body_tree, call_args, call_kwargs, {}, name)
                 assert isinstance(new_tree, ast.expr), ('Wrong type %r' %
                                                         type(new_tree))
                 new_tree = ast.Expr(new_tree)
@@ -174,11 +174,11 @@ class Block(MacroType):
             assert isinstance(in_tree.body, list), real_repr(in_tree.body)
             new_tree = None
             for wi in in_tree.items:
-                name, macro_tree, call_args, kwargs = self.get_macro_details(
+                name, macro_tree, call_args, call_kwargs = self.get_macro_details(
                     wi.context_expr)
                 if name is not None and name in self.registry:
                     new_tree = yield MacroData(self.registry[name], macro_tree,
-                                               in_tree.body, call_args, kwargs,
+                                               in_tree.body, call_args, call_kwargs,
                                                {'target': wi.optional_vars}, name)
                     in_tree.body = new_tree
 
@@ -215,7 +215,7 @@ class Decorator(MacroType):
             additions = []
             # process each decorator from the innermost outwards
             for dec in rev_decs:
-                name, macro_tree, call_args, kwargs = self.get_macro_details(dec)
+                name, macro_tree, call_args, call_kwargs = self.get_macro_details(dec)
                 # if the decorator is not a macro, add it to a list
                 # for later re-insertion, either before executing an
                 # outer macro or at the end of the loop if no macro is found
@@ -229,7 +229,7 @@ class Decorator(MacroType):
                                            tree.decorator_list)
                     seen_decs = []
                 tree = yield MacroData(self.registry[name], macro_tree, tree,
-                                       call_args, kwargs, {}, name)
+                                       call_args, call_kwargs, {}, name)
                 if type(tree) is list:
                     additions = tree[1:]
                     tree = tree[0]
@@ -500,7 +500,7 @@ class ExpansionContext:
             new_tree = mfunc(
                 tree=new_tree,
                 args=macro_data.call_args,
-                kwargs=macro_data.kwargs,
+                kwargs=macro_data.call_kwargs,
                 src=self.src,
                 expand_macros=self.expand_macros,
                 **dict(tuple(macro_data.extrakws.items()) +
@@ -531,7 +531,7 @@ class ExpansionContext:
             new_tree = function(
                 tree=new_tree,
                 args=macro_data.call_args,
-                kwargs=macro_data.kwargs,
+                kwargs=macro_data.call_kwargs,
                 src=self.src,
                 expand_macros=self.expand_macros,
                 lineno=macro_data.macro_tree.lineno,
